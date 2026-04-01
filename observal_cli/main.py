@@ -42,7 +42,28 @@ def init():
         rprint("[red]Connection failed. Is the server running?[/red]")
         raise typer.Exit(1)
     except httpx.HTTPStatusError as e:
-        rprint(f"[red]Error {e.response.status_code}: {e.response.text}[/red]")
+        if e.response.status_code == 400 and "already initialized" in e.response.text.lower():
+            rprint("[yellow]System already initialized.[/yellow]")
+            rprint("Use [bold]observal login[/bold] to authenticate with an existing API key,")
+            rprint(f"or reset the database: [dim]cd docker && docker compose down -v && docker compose up -d[/dim]")
+            if typer.confirm("Do you have an API key and want to login now?", default=True):
+                api_key = typer.prompt("API Key", hide_input=True)
+                try:
+                    r2 = httpx.get(
+                        f"{server_url.rstrip('/')}/api/v1/auth/whoami",
+                        headers={"X-API-Key": api_key},
+                        timeout=30,
+                    )
+                    r2.raise_for_status()
+                    user = r2.json()
+                    config.save({"server_url": server_url, "api_key": api_key})
+                    rprint(f"[green]Logged in as {user['name']} ({user['email']})[/green]")
+                except (httpx.HTTPStatusError, httpx.ConnectError):
+                    rprint("[red]Invalid API key or connection failed.[/red]")
+                    raise typer.Exit(1)
+        else:
+            rprint(f"[red]Error {e.response.status_code}: {e.response.text}[/red]")
+            raise typer.Exit(1)
         raise typer.Exit(1)
 
 
