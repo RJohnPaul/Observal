@@ -1,11 +1,17 @@
 # AGENTS.md
 
-Internal context for contributors and AI coding agents. Use `README.md` as the public source of truth for API endpoints and CLI usage. Use `SETUP.md` for environment setup. Use `docs/telemetry-overhaul.md` for the telemetry pipeline design.
+Internal context for contributors and AI coding agents. Use `README.md` as the public source of truth for API endpoints and CLI usage. Use `SETUP.md` for environment setup. Use `docs/design-new-registry-types.md` for the registry expansion design. Use `docs/telemetry-overhaul.md` for the telemetry pipeline design.
+
+## Current state
+
+Observal is an eval and observability platform for agentic coding workflows. It currently supports 2 registry types (MCP servers, agents) and is expanding to 8 (adding tools, skills, hooks, prompts, sandboxes, GraphRAGs). The design spec for the expansion is at `docs/design-new-registry-types.md`.
+
+The old Vite+React web UI (`observal-web/`) has been removed. There is no frontend. The GraphQL API at `/api/v1/graphql` is the read layer for telemetry data and will serve a future frontend.
 
 ## Commands
 
 ```bash
-# Docker stack (6 containers: api, web, db, clickhouse, redis, worker)
+# Docker stack (5 containers: api, db, clickhouse, redis, worker)
 make up                  # start
 make down                # stop
 make rebuild             # rebuild and restart
@@ -18,7 +24,7 @@ observal whoami          # check auth
 observal status          # server health check
 
 # Linting
-make lint                # ruff check + eslint
+make lint                # ruff check
 make format              # ruff format + ruff fix
 make check               # pre-commit on all files
 make hooks               # install pre-commit hooks
@@ -28,11 +34,6 @@ make test                # quick
 make test-v              # verbose
 # or manually:
 cd observal-server && uv run --with pytest --with pytest-asyncio --with pyyaml --with typer --with rich pytest ../tests/ -q
-
-# Web UI dev
-cd observal-web && npm run dev        # vite dev server
-cd observal-web && npm run lint       # eslint
-cd observal-web && npm run typecheck  # tsc --noEmit
 ```
 
 ## Important files
@@ -91,19 +92,10 @@ cd observal-web && npm run typecheck  # tsc --noEmit
 - `shim.py` — `observal-shim`: transparent stdio JSON-RPC proxy; pairs requests/responses into spans; caches tools/list for schema compliance; buffered async telemetry flush
 - `proxy.py` — `observal-proxy`: HTTP reverse proxy reusing ShimState; same telemetry pipeline
 
-### Web UI (`observal-web/`)
-
-- Vite + React + urql SPA; queries GraphQL at `/api/v1/graphql`
-- `src/App.tsx` — Router: Overview, TraceExplorer, TraceDetail, McpMetrics
-- `src/lib/urql.ts` — urql client with WebSocket subscriptions
-- `src/lib/queries.ts` — GraphQL queries and subscriptions
-- `src/components/` — TraceExplorer, TraceDetail, Overview, McpMetrics
-
 ### Docker (`docker/`)
 
-- `docker-compose.yml` — 6 services: api (8000), web (3000), db (PostgreSQL 16), clickhouse (8123/9000), redis (6379), worker (arq)
+- `docker-compose.yml` — 5 services: api (8000), db (PostgreSQL 16), clickhouse (8123/9000), redis (6379), worker (arq)
 - `Dockerfile.api` — uv-based Python build
-- `Dockerfile.web` — Multi-stage Vite build with `serve`
 
 ### Tests (`tests/`)
 
@@ -118,18 +110,35 @@ cd observal-web && npm run typecheck  # tsc --noEmit
 - `test_phase9_10.py` — Dual-write, CLI commands (7 tests)
 - `conftest.py` — Adds observal-server to sys.path so tests can import server modules
 
+## Next up: registry expansion
+
+The design spec at `docs/design-new-registry-types.md` covers 6 new registry types. Implementation order:
+
+1. Submissions table + unified review refactor
+2. Prompts (simplest, proves the pattern)
+3. Telemetry schema extensions (new span/trace columns)
+4. Tool Calls (schema validation, tool shim)
+5. Hooks (agent linking, hook runner telemetry)
+6. Skills (git clone + SKILL.md parsing, Powers variant for Kiro)
+7. GraphRAGs (endpoint validation, retrieval/embedding proxy)
+8. Sandbox Exec (image pull + security scan, container metrics)
+9. Feedback + metrics extension for all types
+10. GraphQL + dashboard extension
+
+Each type needs: model, schema, route, CLI command, validator, config generator, telemetry collection, and metrics queries.
+
 ## Implementation notes
 
 - Two databases: PostgreSQL for relational data (users, MCPs, agents, feedback, eval runs), ClickHouse for time-series telemetry (traces, spans, scores). They are not interchangeable.
 - ClickHouse uses ReplacingMergeTree with bloom filter indexes. Queries go through the HTTP interface, not a native driver. The `_query` helper in `clickhouse.py` handles parameterized queries.
 - The shim is the core telemetry collection mechanism. It sits between the IDE and the MCP server, completely transparent. It never modifies messages — only observes. Telemetry is fire-and-forget via async POST; if the server is down, spans are silently dropped.
 - Config generators automatically wrap MCP commands with `observal-shim` for stdio transport or point to `observal-proxy` for HTTP transport. This is how telemetry collection is opt-in per install.
-- GraphQL replaced the REST dashboard endpoints. REST still exists for auth, CRUD, feedback, eval, admin. The GraphQL layer is read-only for telemetry data and uses DataLoaders to batch ClickHouse queries.
+- GraphQL is the read layer for telemetry data. REST still exists for auth, CRUD, feedback, eval, admin. The GraphQL layer uses DataLoaders to batch ClickHouse queries.
 - Redis serves two purposes: pub/sub for GraphQL subscriptions (live trace/span events) and arq job queue for background eval runs.
 - The eval engine is pluggable. `LLMJudgeBackend` calls Bedrock or OpenAI-compatible endpoints. `FallbackBackend` returns deterministic scores when no LLM is configured. The 6 managed templates are prompt strings, not code.
 - Feedback dual-writes: when a user rates an MCP/agent, it writes to PostgreSQL (for the feedback API) AND ClickHouse scores table (for unified analytics). The ClickHouse write is best-effort.
 - Auth is API key based. Keys are hashed with SECRET_KEY before storage. The `X-API-Key` header is checked on every authenticated request via `get_current_user` dependency.
 - The CLI stores config in `~/.observal/config.json`. Aliases are in `~/.observal/aliases.json`. Both are plain JSON.
 - All CLI list/show commands support `--output table|json|plain`. Use `--output json` for scripting. Use `--raw` on install commands to pipe config directly to files.
-- Ruff is the Python linter and formatter. Line length is 120. ESLint with typescript-eslint for the web project. Pre-commit hooks enforce both.
+- Ruff is the Python linter and formatter. Line length is 120. Pre-commit hooks enforce it.
 - The `B008` ruff rule is suppressed because Typer requires function calls in argument defaults (`typer.Option(...)`, `typer.Argument(...)`).

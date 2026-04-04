@@ -838,7 +838,7 @@ Span attributes captured:
 - `input`: query text
 - `output`: result summary (truncated)
 
-Dashboard metrics (aligned with [Langfuse RAG observability](https://langfuse.com/blog/2025-10-28-rag-observability-and-evals) patterns):
+Dashboard metrics (aligned with industry RAG observability patterns):
 - Query count, error rate
 - Avg entities retrieved, avg relationships used
 - Latency percentiles (total, embedding-only)
@@ -1071,7 +1071,7 @@ Observal's span model maps to OTel GenAI semantic conventions as follows:
 | `cpu_ms` | `container.cpu.time` (OTel system convention) | |
 | `memory_mb` | `container.memory.usage` (OTel system convention) | |
 
-This alignment means Observal telemetry can be exported to any OTel-compatible backend (Datadog, Langfuse, Jaeger) with minimal transformation.
+This alignment means Observal telemetry can be exported to any OTel-compatible backend (Datadog, Jaeger, etc.) with minimal transformation.
 
 ---
 
