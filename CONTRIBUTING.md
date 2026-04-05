@@ -24,6 +24,7 @@ Requirements:
 
 - Docker and Docker Compose
 - [uv](https://docs.astral.sh/uv/) (Python 3.11+)
+- Node.js 20+ and pnpm (for the web frontend)
 - Git
 
 ## Running Locally
@@ -41,6 +42,16 @@ observal init
 ```
 
 The API starts at http://localhost:8000.
+
+### Frontend
+
+```bash
+cd web
+pnpm install
+pnpm dev
+```
+
+The web UI starts at http://localhost:3000. Set `NEXT_PUBLIC_API_URL=http://localhost:8000` in `web/.env.local` if the backend is on a different host.
 
 See [SETUP.md](SETUP.md) for detailed configuration and troubleshooting.
 

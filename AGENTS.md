@@ -8,7 +8,7 @@ Observal is an eval and observability platform for agentic coding workflows. It 
 
 All API routes accept either UUID or name for path parameters. Admin review controls public registry visibility only — submitters can install and use their own items immediately without approval.
 
-There is no frontend. The GraphQL API at `/api/v1/graphql` is the read layer for telemetry data and will serve a future frontend.
+The web frontend is a Next.js 16 / React 19 app in `web/`. It uses shadcn/ui components, Recharts for charts, TanStack Query for data fetching, and TanStack Table for sortable/filterable tables. Shared API response types live in `web/src/lib/types.ts`. The GraphQL API at `/api/v1/graphql` is the read layer for telemetry data; REST endpoints serve everything else.
 
 ## Commands
 
@@ -62,6 +62,7 @@ cd observal-server && uv run --with pytest --with pytest-asyncio --with pyyaml -
 - `api/routes/feedback.py` : Ratings with dual-write to PostgreSQL + ClickHouse scores table
 - `api/routes/eval.py` : Run evals, list scorecards, compare versions
 - `api/routes/admin.py` : Enterprise settings CRUD, user management, role changes
+- `api/routes/alert.py` : Alert rule CRUD (metric threshold alerts with webhook URLs)
 - `api/routes/scan.py` : `POST /api/v1/scan` bulk registration from IDE config scans; deduplicates by name
 
 ### Models (`observal-server/models/`)
@@ -69,6 +70,7 @@ cd observal-server && uv run --with pytest --with pytest-asyncio --with pyyaml -
 - `user.py` : User with UserRole enum (admin, developer, user); API key is hashed with SECRET_KEY
 - `mcp.py` : McpListing, McpCustomField, McpValidationResult, McpDownload; ListingStatus enum (pending, approved, rejected)
 - `agent.py` : Agent, AgentMcpLink, GoalTemplate, GoalSection, AgentDownload; AgentStatus enum
+- `alert.py` : AlertRule (metric threshold alerts with webhook URLs)
 - `tool.py` : ToolListing, ToolDownload
 - `skill.py` : SkillListing, SkillDownload, AgentSkillLink
 - `hook.py` : HookListing, HookDownload, AgentHookLink
@@ -141,6 +143,19 @@ cd observal-server && uv run --with pytest --with pytest-asyncio --with pyyaml -
 - `test_registry_types.py` : Models, schemas, routes, review, feedback, CLI for all 6 new types (80 tests)
 - `test_telemetry_collection.py` : Sandbox runner, GraphRAG proxy, config generators, install route wiring (32 tests)
 - `conftest.py` : Adds observal-server to sys.path so tests can import server modules
+
+### Web Frontend (`web/`)
+
+- `src/lib/api.ts` : Typed fetch wrapper; all REST + GraphQL calls; auth via localStorage API key
+- `src/lib/types.ts` : Shared TypeScript interfaces for all API responses
+- `src/hooks/use-api.ts` : TanStack Query hooks for every endpoint (queries + mutations)
+- `src/app/(dashboard)/page.tsx` : Dashboard home with stat cards, trends, heatmap, quick nav
+- `src/app/(dashboard)/layout.tsx` : Sidebar + auth guard + command menu + toaster
+- `src/components/nav/app-sidebar.tsx` : Navigation sidebar with all registry/observability/eval sections
+- `src/components/traces/` : Trace list, trace detail (resizable span tree + JSON viewer), span tree with collapsible thread lines
+- `src/components/live/trace-stream.tsx` : Real-time trace stream with pause/resume and server-side filtering
+- `src/components/registry/` : Generic registry table (TanStack Table), detail view, install dialog, metrics panel
+- `src/components/dashboard/` : Reusable stat cards, trend charts, bar lists, heatmap, time range select, no-data/error states
 
 ### Demo (`demo/`)
 

@@ -317,6 +317,15 @@ All `{id}` parameters accept either a UUID or a name.
 | `POST` | `/api/v1/admin/users` | Create user |
 | `PUT` | `/api/v1/admin/users/{id}/role` | Change role |
 
+### Alerts
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/v1/alerts` | List alert rules |
+| `POST` | `/api/v1/alerts` | Create alert rule |
+| `PATCH` | `/api/v1/alerts/{id}` | Update alert status |
+| `DELETE` | `/api/v1/alerts/{id}` | Delete alert rule |
+
 ### GraphQL
 
 | Endpoint | Description |
