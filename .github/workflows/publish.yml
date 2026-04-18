@@ -4,14 +4,18 @@
 # Triggers on GitHub Releases (tag pattern: v*).
 #
 # Setup (one-time):
-#   1. Go to https://pypi.org/manage/account/publishing/
-#   2. Add a new "pending publisher" with:
+#   IMPORTANT: A "pending publisher" does NOT reserve a project name on PyPI.
+#   The project name is only reserved once the project is actually created.
+#   Recommended order:
+#   1. Create the project first (initial publish by a maintainer account).
+#   2. Go to https://pypi.org/manage/account/publishing/
+#   3. Add a new "pending publisher" with:
 #        PyPI Project Name:  observal-cli
 #        Owner:              RJohnPaul
 #        Repository name:    Observal
 #        Workflow name:      publish.yml
 #        Environment name:   pypi
-#   3. In GitHub repo Settings → Environments, create an environment
+#   4. In GitHub repo Settings → Environments, create an environment
 #      named "pypi" with protection rules (optional but recommended).
 # ─────────────────────────────────────────────────────────────────────────────
 
