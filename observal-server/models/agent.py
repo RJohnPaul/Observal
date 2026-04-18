@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -11,12 +11,15 @@ from models.base import Base
 
 class AgentStatus(str, enum.Enum):
     draft = "draft"
+    pending = "pending"
     active = "active"
+    rejected = "rejected"
     archived = "archived"
 
 
 class Agent(Base):
     __tablename__ = "agents"
+    __table_args__ = (UniqueConstraint("name", "created_by", name="uq_agents_name_created_by"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -33,7 +36,8 @@ class Agent(Base):
     owner_org_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True
     )
-    status: Mapped[AgentStatus] = mapped_column(Enum(AgentStatus), default=AgentStatus.active)
+    status: Mapped[AgentStatus] = mapped_column(Enum(AgentStatus), default=AgentStatus.pending)
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     download_count: Mapped[int] = mapped_column(Integer, default=0)
     unique_users: Mapped[int] = mapped_column(Integer, default=0)
     created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)

@@ -52,6 +52,7 @@ class TopAgentItem(BaseModel):
     name: str
     description: str = ""
     owner: str = ""
+    created_by_username: str | None = None
     version: str = ""
     download_count: int = 0
     average_rating: float | None = None
@@ -60,7 +61,17 @@ class TopAgentItem(BaseModel):
 class LeaderboardItem(TopAgentItem):
     """Same as TopAgentItem — used by the leaderboard endpoint."""
 
-    pass
+    created_by_email: str = ""
+    created_by_username: str | None = None
+
+
+class ComponentLeaderboardItem(BaseModel):
+    id: uuid.UUID
+    name: str
+    component_type: str
+    description: str = ""
+    download_count: int = 0
+    created_by_email: str = ""
 
 
 class TrendPoint(BaseModel):

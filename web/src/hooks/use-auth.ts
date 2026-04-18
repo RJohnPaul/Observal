@@ -1,47 +1,49 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { auth, setUserRole, getUserRole } from "@/lib/api";
+import { auth, setUserRole, getUserRole, clearSession } from "@/lib/api";
+
+function subscribe(cb: () => void) {
+  window.addEventListener("storage", cb);
+  return () => window.removeEventListener("storage", cb);
+}
+
+function getAuthSnapshot() {
+  const key = localStorage.getItem("observal_access_token");
+  const role = getUserRole();
+  return key ? (role || "pending") : "";
+}
+
+function getServerSnapshot() {
+  return "";
+}
 
 export function useAuthGuard() {
   const router = useRouter();
   const pathname = usePathname();
-  const [ready, setReady] = useState(() => {
-    if (typeof window === "undefined") return false;
-    const key = localStorage.getItem("observal_access_token");
-    if (!key) return false;
-    return !!getUserRole();
-  });
-  const [role, setRole] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return getUserRole();
-  });
+  const snapshot = useSyncExternalStore(subscribe, getAuthSnapshot, getServerSnapshot);
+  const hasToken = snapshot !== "";
+  const ready = hasToken && snapshot !== "pending";
+  const role = ready ? snapshot : null;
 
   useEffect(() => {
-    const key = localStorage.getItem("observal_access_token");
-    if (!key && pathname !== "/login") {
+    if (!hasToken && pathname !== "/login") {
       router.replace("/login");
       return;
     }
-    if (!key) {
-      // Already ready from initial state
-      return;
-    }
+    if (!hasToken) return;
 
-    const cached = getUserRole();
-    if (cached) {
-      // Already ready from initial state
-      return;
+    if (snapshot === "pending") {
+      auth.whoami().then((user) => {
+        setUserRole(user.role);
+        window.dispatchEvent(new Event("storage"));
+      }).catch(() => {
+        clearSession();
+        window.dispatchEvent(new Event("storage"));
+        router.replace("/login");
+      });
     }
-
-    auth.whoami().then((user) => {
-      setUserRole(user.role);
-      setRole(user.role);
-      setReady(true);
-    }).catch(() => {
-      router.replace("/login");
-    });
-  }, [pathname, router]);
+  }, [hasToken, snapshot, pathname, router]);
 
   return { ready, role };
 }
@@ -52,44 +54,23 @@ export function useAuthGuard() {
  * Does NOT redirect to login.
  */
 export function useOptionalAuth() {
-  const [ready, setReady] = useState(() => {
-    if (typeof window === "undefined") return false;
-    const key = localStorage.getItem("observal_access_token");
-    if (!key) return true;
-    return !!getUserRole();
-  });
-  const [role, setRole] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return getUserRole();
-  });
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return !!getUserRole();
-  });
+  const snapshot = useSyncExternalStore(subscribe, getAuthSnapshot, getServerSnapshot);
+  const hasToken = snapshot !== "";
+  const ready = !hasToken || snapshot !== "pending";
+  const role = (hasToken && snapshot !== "pending") ? snapshot : null;
+  const isAuthenticated = hasToken && snapshot !== "pending";
 
   useEffect(() => {
-    const key = localStorage.getItem("observal_access_token");
-    if (!key) {
-      // Already ready from initial state
-      return;
+    if (hasToken && snapshot === "pending") {
+      auth.whoami().then((user) => {
+        setUserRole(user.role);
+        window.dispatchEvent(new Event("storage"));
+      }).catch(() => {
+        clearSession();
+        window.dispatchEvent(new Event("storage"));
+      });
     }
-
-    const cached = getUserRole();
-    if (cached) {
-      // Already ready from initial state
-      return;
-    }
-
-    auth.whoami().then((user) => {
-      setUserRole(user.role);
-      setRole(user.role);
-      setIsAuthenticated(true);
-      setReady(true);
-    }).catch(() => {
-      // API key invalid — treat as unauthenticated
-      setReady(true);
-    });
-  }, []);
+  }, [hasToken, snapshot]);
 
   return { ready, role, isAuthenticated };
 }
