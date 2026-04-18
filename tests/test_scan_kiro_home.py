@@ -5,10 +5,17 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+from typer.testing import CliRunner
+
+import observal_cli.cmd_scan as cmd_scan
+from observal_cli.main import app
 from observal_cli.cmd_scan import _scan_kiro_home
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+runner = CliRunner()
 
 
 def _write_json(path: Path, data: dict) -> None:
@@ -147,6 +154,56 @@ class TestKiroAgentDiscovery:
         names = {a.name for a in agents}
         assert "coder" in names
         assert "api-designer" in names
+
+
+class TestScanCommandKiroSelection:
+    def test_scan_ide_kiro_triggers_home_scan_without_home_flag(self, tmp_path: Path, monkeypatch):
+        """Regression: `scan --ide kiro` must activate Kiro home scanning/instrumentation path."""
+        # Project MCP so scan has at least one discovered component.
+        project = tmp_path / "project"
+        _write_json(
+            project / ".kiro" / "settings" / "mcp.json",
+            {"mcpServers": {"proj-srv": {"command": "python", "args": ["-m", "srv"]}}},
+        )
+
+        # Home ~/.kiro exists so the home scan branch is reachable.
+        fake_home = tmp_path / "home"
+        (fake_home / ".kiro").mkdir(parents=True)
+
+        called = {"kiro": False}
+
+        def _fake_scan_kiro_home(_kiro_dir):
+            called["kiro"] = True
+            return ([], [], [], [])
+
+        monkeypatch.setattr(cmd_scan, "_scan_kiro_home", _fake_scan_kiro_home)
+        monkeypatch.setattr(cmd_scan.Path, "home", staticmethod(lambda: fake_home))
+
+        result = runner.invoke(app, ["scan", str(project), "--ide", "kiro", "--dry-run"])  # no --home on purpose
+
+        assert result.exit_code == 0
+        assert called["kiro"] is True
+
+    def test_scan_home_no_components_still_succeeds_for_hook_setup(self, tmp_path: Path, monkeypatch):
+        """Regression: `scan --home` should not fail before home hook setup when no components are found."""
+        project = tmp_path / "project"
+        project.mkdir(parents=True)
+
+        fake_home = tmp_path / "home"
+        (fake_home / ".kiro").mkdir(parents=True)
+
+        monkeypatch.setattr(cmd_scan.Path, "home", staticmethod(lambda: fake_home))
+
+        # Ensure home scan path runs but returns no discoverable components.
+        monkeypatch.setattr(cmd_scan, "_scan_kiro_home", lambda _kiro_dir: ([], [], [], []))
+
+        # Avoid touching real config/user files during test.
+        monkeypatch.setattr(cmd_scan, "_backup_config", lambda _path: None)
+
+        result = runner.invoke(app, ["scan", str(project), "--home", "--yes"])
+
+        assert result.exit_code == 0, result.output
+        assert "No components found." in result.output
 
     def test_malformed_agent_json_skipped(self, tmp_path: Path):
         kiro = tmp_path / ".kiro"

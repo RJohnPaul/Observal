@@ -774,7 +774,10 @@ def register_scan(app: typer.Typer):
             from observal_cli.config import load as _load_config
 
             cfg = _load_config()
-            server_url = cfg.get("server_url", "http://localhost:8000").rstrip("/")
+            server_url = cfg.get("server_url", "").rstrip("/")
+            if not server_url:
+                rprint("[yellow]No server URL configured. Run [bold]observal auth login[/bold] first.[/yellow]")
+                raise typer.Exit(1)
             hooks_url = f"{server_url}/api/v1/otel/hooks"
             hook_def: dict = {"type": "http", "url": hooks_url}
             if cfg.get("user_id"):
@@ -861,7 +864,10 @@ def register_scan(app: typer.Typer):
             from observal_cli.config import load as _load_kiro_config
 
             kcfg = _load_kiro_config()
-            kiro_server_url = kcfg.get("server_url", "http://localhost:8000").rstrip("/")
+            kiro_server_url = kcfg.get("server_url", "").rstrip("/")
+            if not kiro_server_url:
+                rprint("[yellow]No server URL configured. Run [bold]observal auth login[/bold] first.[/yellow]")
+                raise typer.Exit(1)
             kiro_hooks_url = f"{kiro_server_url}/api/v1/otel/hooks"
 
             hooks_dir = Path(__file__).parent / "hooks"

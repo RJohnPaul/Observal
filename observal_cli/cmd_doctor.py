@@ -73,6 +73,9 @@ def _load_json(path: Path) -> dict | None:
 
 def _check_claude_code(path: Path, data: dict, issues: list, warnings: list):
     """Check Claude Code settings for Observal conflicts."""
+    cfg = config.load()
+    server_url = cfg.get("server_url", "").rstrip("/")
+
     # Hooks disabled entirely
     if data.get("disableAllHooks"):
         issues.append(f"{path}: `disableAllHooks` is true. Observal hook telemetry will not fire.")
@@ -80,11 +83,15 @@ def _check_claude_code(path: Path, data: dict, issues: list, warnings: list):
     # allowedHttpHookUrls blocks our endpoint
     allowed_urls = data.get("allowedHttpHookUrls")
     if isinstance(allowed_urls, list) and len(allowed_urls) > 0:
-        has_observal = any("localhost:8000" in u or "observal" in u.lower() for u in allowed_urls)
+        has_observal = any(
+            (server_url and server_url in u) or "observal" in u.lower()
+            for u in allowed_urls
+        )
         if not has_observal:
+            hint_url = f"{server_url}/*" if server_url else "your Observal server URL"
             issues.append(
                 f"{path}: `allowedHttpHookUrls` is set but does not include Observal's URL. "
-                "Add `http://localhost:8000/*` to allow hook telemetry."
+                f"Add `{hint_url}` to allow hook telemetry."
             )
 
     # httpHookAllowedEnvVars blocks OBSERVAL_API_KEY
@@ -117,11 +124,19 @@ def _check_claude_code(path: Path, data: dict, issues: list, warnings: list):
     network = sandbox.get("network", {})
     allowed_domains = network.get("allowedDomains", [])
     if isinstance(allowed_domains, list) and len(allowed_domains) > 0:
-        has_localhost = any("localhost" in d for d in allowed_domains)
-        if not has_localhost:
+        # Check if the configured server's hostname is in allowed domains
+        from urllib.parse import urlparse
+
+        server_hostname = ""
+        if server_url:
+            server_hostname = urlparse(server_url).hostname or ""
+        check_hosts = [h for h in [server_hostname, "localhost"] if h]
+        has_server = any(h in d for d in allowed_domains for h in check_hosts)
+        if not has_server:
+            host_hint = server_hostname or "your Observal server hostname"
             warnings.append(
-                f"{path}: sandbox `network.allowedDomains` does not include `localhost`. "
-                "Observal telemetry POSTs to localhost:8000."
+                f"{path}: sandbox `network.allowedDomains` does not include `{host_hint}`. "
+                "Observal telemetry POSTs require network access to the server."
             )
 
     # env vars that override Observal
@@ -297,9 +312,9 @@ def _check_environment(issues: list, warnings: list):
         warnings.append("Docker is not running. `observal-sandbox-run` requires Docker.")
 
     # Check entry points
-    for ep in ["observal-shim", "observal-proxy", "observal-sandbox-run", "observal-graphrag-proxy"]:
+    for ep in ["observal-shim", "observal-proxy", "observal-sandbox-run"]:
         if not shutil.which(ep):
-            warnings.append(f"`{ep}` not found in PATH. Run `uv tool install --editable .` from the Observal repo.")
+            warnings.append(f"`{ep}` not found in PATH. Reinstall with: pip install observal-cli")
 
 
 # ── Main doctor command ──────────────────────────────────
@@ -389,11 +404,14 @@ def doctor(
 
     if fix and issues:
         rprint("\n[bold]Suggested fixes:[/bold]")
+        cfg = config.load()
+        fix_server_url = cfg.get("server_url", "").rstrip("/")
         for issue in issues:
             if "disableAllHooks" in issue:
                 rprint("  Set `disableAllHooks: false` in your Claude Code settings.json")
             elif "allowedHttpHookUrls" in issue:
-                rprint('  Add `"http://localhost:8000/*"` to `allowedHttpHookUrls`')
+                hint = f"{fix_server_url}/*" if fix_server_url else "your Observal server URL/*"
+                rprint(f'  Add `"{hint}"` to `allowedHttpHookUrls`')
             elif "OBSERVAL_API_KEY" in issue and "httpHookAllowedEnvVars" in issue:
                 rprint('  Add `"OBSERVAL_API_KEY"` to `httpHookAllowedEnvVars`')
             elif "allowManagedHooksOnly" in issue:

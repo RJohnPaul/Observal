@@ -196,7 +196,11 @@ def ops_sync():
         return
 
     cfg = config.load()
-    hooks_url = cfg.get("server_url", "http://localhost:8000").rstrip("/") + "/api/v1/otel/hooks"
+    server_url = cfg.get("server_url", "")
+    if not server_url:
+        rprint("[red]Not configured.[/red] Run [bold]observal auth login[/bold] first.")
+        raise typer.Exit(1)
+    hooks_url = server_url.rstrip("/") + "/api/v1/otel/hooks"
     user_id = cfg.get("user_id", "")
 
     total_sent = 0
@@ -1202,11 +1206,26 @@ self_app = typer.Typer(
 
 def _upgrade_impl():
     """Upgrade observal CLI to the latest version."""
+    import shutil
     import subprocess
 
-    with spinner("Upgrading..."):
+    # Detect install method: prefer uv if available and it manages this install,
+    # otherwise fall back to pip.
+    uv_bin = shutil.which("uv")
+    pip_bin = shutil.which("pip") or shutil.which("pip3")
+
+    if uv_bin:
+        cmd = [uv_bin, "tool", "upgrade", "observal-cli"]
+    elif pip_bin:
+        cmd = [pip_bin, "install", "--upgrade", "observal-cli"]
+    else:
+        rprint("[red]Neither uv nor pip found on PATH.[/red]")
+        rprint("[dim]Install manually: pip install --upgrade observal-cli[/dim]")
+        raise typer.Exit(1)
+
+    with spinner(f"Upgrading via {cmd[0]}..."):
         result = subprocess.run(
-            ["uv", "tool", "upgrade", "observal-cli"],
+            cmd,
             capture_output=True,
             text=True,
             timeout=120,
@@ -1216,7 +1235,21 @@ def _upgrade_impl():
         if result.stdout.strip():
             rprint(f"[dim]{result.stdout.strip()}[/dim]")
     else:
-        rprint(f"[red]Upgrade failed:[/red] {result.stderr.strip()}")
+        stderr = result.stderr.strip()
+        # If uv failed (e.g. not installed via uv tool), try pip as fallback
+        if uv_bin and cmd[0] == uv_bin and pip_bin:
+            rprint("[dim]uv upgrade failed, trying pip...[/dim]")
+            fallback = subprocess.run(
+                [pip_bin, "install", "--upgrade", "observal-cli"],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if fallback.returncode == 0:
+                rprint("[green]✓ Upgraded via pip![/green]")
+                return
+            stderr = fallback.stderr.strip()
+        rprint(f"[red]Upgrade failed:[/red] {stderr}")
         raise typer.Exit(1)
 
 

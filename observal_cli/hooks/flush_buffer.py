@@ -16,12 +16,32 @@ import urllib.request
 from pathlib import Path
 
 DB_PATH = Path.home() / ".observal" / "telemetry_buffer.db"
+CONFIG_FILE = Path.home() / ".observal" / "config.json"
 FLUSH_LIMIT = 20
 MAX_RETRIES = 3
 
 
+def _resolve_hooks_url() -> str:
+    """Read the server URL from env, config file, or fall back to localhost."""
+    env_url = os.environ.get("OBSERVAL_HOOKS_URL")
+    if env_url:
+        return env_url
+    server = os.environ.get("OBSERVAL_SERVER_URL", "")
+    if not server:
+        try:
+            import json as _json
+
+            cfg = _json.loads(CONFIG_FILE.read_text())
+            server = cfg.get("server_url", "")
+        except Exception:
+            pass
+    if not server:
+        server = "http://localhost:8000"
+    return f"{server.rstrip('/')}/api/v1/otel/hooks"
+
+
 def main() -> None:
-    hooks_url = os.environ.get("OBSERVAL_HOOKS_URL", "http://localhost:8000/api/v1/otel/hooks")
+    hooks_url = _resolve_hooks_url()
     user_id = os.environ.get("OBSERVAL_USER_ID", "")
 
     if not DB_PATH.exists():

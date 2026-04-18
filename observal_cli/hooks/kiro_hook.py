@@ -13,11 +13,32 @@ Usage (in a Kiro agent hook):
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import sys
 from pathlib import Path
 
 KIRO_DB = Path.home() / ".local" / "share" / "kiro-cli" / "data.sqlite3"
+CONFIG_FILE = Path.home() / ".observal" / "config.json"
+
+
+def _resolve_hooks_url() -> str:
+    """Read the server URL from env, config file, or fall back to localhost."""
+    env_url = os.environ.get("OBSERVAL_HOOKS_URL")
+    if env_url:
+        return env_url
+    server = os.environ.get("OBSERVAL_SERVER_URL", "")
+    if not server:
+        try:
+            import json as _json
+
+            cfg = _json.loads(CONFIG_FILE.read_text())
+            server = cfg.get("server_url", "")
+        except Exception:
+            pass
+    if not server:
+        server = "http://localhost:8000"
+    return f"{server.rstrip('/')}/api/v1/otel/hooks"
 
 
 def _add_conversation_id(payload: dict) -> dict:
@@ -49,7 +70,7 @@ def _add_conversation_id(payload: dict) -> dict:
 def main():
     import urllib.request
 
-    url = "http://localhost:8000/api/v1/otel/hooks"
+    url = _resolve_hooks_url()
     args = sys.argv[1:]
     for i, arg in enumerate(args):
         if arg == "--url" and i + 1 < len(args):
